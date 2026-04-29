@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>To Ariska. From Yesy</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #060914;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Cormorant Garamond', serif;
+    overflow: hidden;
+    position: relative;
+  }
+
+  #sky-canvas {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  #falling-canvas {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  .scene {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  #bouquet-svg {
+    display: block;
+    filter: drop-shadow(0 12px 40px rgba(201, 200, 255, 0.18));
+  }
+
+  .text-block {
+    text-align: center;
+    margin-top: 18px;
+    position: relative;
+  }
+
+  .congrats-word {
+    font-family: 'IM Fell English', serif;
+    font-style: italic;
+    font-size: clamp(1rem, 2vw, 1.4rem);
+    color: #e4dbfc;
+    line-height: 1.5;
+    letter-spacing: -0.01em;
+    text-shadow: 0 0 30px rgba(100, 115, 255, 0.25);
+    margin-bottom: 10px;
+  }
+
+  .name-text {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 400;
+    font-size: clamp(0.75rem, 1.3vw, 0.95rem);
+    color: #e4dbfc;
+    letter-spacing: 0.02em;
+    line-height: 1.75;
+    max-width: 750px;
+    text-align: center;
+    text-shadow: 0 0 20px rgba(110, 100, 255, 0.25);
+    white-space: pre-line;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="sky-canvas"></canvas>
+<canvas id="falling-canvas"></canvas>
+
+<div class="scene">
+  <svg id="bouquet-svg" width="360" height="380" viewBox="0 0 400 430"></svg>
+
+  <div class="text-block">
+    <p class="congrats-word">Congrats Ariska Nur Septiani, S.K.M!!!</p>
+    <p class="name-text" id="nameDisplay">Here are some blue lilies for you ૮꒰ ˶• ༝ •˶꒱ა 
+  To say I'm proud is an understatement. So coolll-la akhirnya sampe di fase ini.
+   Also, I hope and I pray that setelah ini langkahmu makin lancar ya, apapun rencanamu nantinya,
+   pelan-pelan tapi pasti riska pasti bisa menuju hal-hal baik yang udah nunggu di depan! Harus!
+  But first, enjoy the rest of the day, it's ur special day after all....</p>
+  </div>
+</div>
+
+<script>
+const SVG_NS = 'http://www.w3.org/2000/svg';
+function el(tag, attrs = {}) {
+  const e = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  return e;
+}
+function rand(a, b) { return a + Math.random() * (b - a); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+// ── STARRY SKY ──
+const skyCanvas = document.getElementById('sky-canvas');
+const skyCtx = skyCanvas.getContext('2d');
+
+function resizeSky() {
+  skyCanvas.width  = window.innerWidth;
+  skyCanvas.height = window.innerHeight;
+}
+resizeSky();
+window.addEventListener('resize', resizeSky);
+
+const stars = [];
+const STAR_COUNT = 320;
+for (let i = 0; i < STAR_COUNT; i++) {
+  stars.push({
+    x: rand(0, 1), y: rand(0, 1),
+    r: rand(0.2, 1.6),
+    baseAlpha: rand(0.3, 1.0),
+    alpha: rand(0.3, 1.0),
+    speed: rand(0.004, 0.018),
+    phase: rand(0, Math.PI * 2),
+    color: (() => {
+      const p = Math.random();
+      if (p < 0.12) return '#b8d4ff';
+      if (p < 0.22) return '#ffd9a0';
+      if (p < 0.28) return '#ffb8b8';
+      return '#ffffff';
+    })(),
+  });
+}
+
+const brightStars = Array.from({ length: 18 }, () => ({
+  x: rand(0.02, 0.98), y: rand(0.02, 0.75),
+  r: rand(1.8, 3.2),
+  phase: rand(0, Math.PI * 2),
+  speed: rand(0.006, 0.014),
+  color: ['#ffffff', '#fffbe0', '#c8e0ff'][Math.floor(rand(0, 3))],
+}));
+
+const shooters = [];
+function spawnShooter() {
+  shooters.push({
+    x: rand(0.1, 0.9), y: rand(0.0, 0.45),
+    len: rand(0.10, 0.22),
+    angle: rand(Math.PI / 5, Math.PI / 3),
+    speed: rand(0.012, 0.025),
+    alpha: 2, progress: 0,
+  });
+}
+setInterval(() => { if (Math.random() < 0.75) spawnShooter(); }, 1000);
+
+let skyT = 0;
+function drawSky() {
+  const W = skyCanvas.width, H = skyCanvas.height;
+  skyT += 0.016;
+
+  const grad = skyCtx.createRadialGradient(W*0.5, H*0.55, 0, W*0.5, H*0.4, W*0.85);
+  grad.addColorStop(0,   '#0d1535');
+  grad.addColorStop(0.4, '#080e22');
+  grad.addColorStop(1,   '#020508');
+  skyCtx.fillStyle = grad;
+  skyCtx.fillRect(0, 0, W, H);
+
+  const mw = skyCtx.createLinearGradient(0, H*0.1, W, H*0.55);
+  mw.addColorStop(0,   'rgba(100,120,200,0)');
+  mw.addColorStop(0.3, 'rgba(120,140,210,0.055)');
+  mw.addColorStop(0.5, 'rgba(160,170,230,0.07)');
+  mw.addColorStop(0.7, 'rgba(120,140,210,0.04)');
+  mw.addColorStop(1,   'rgba(100,120,200,0)');
+  skyCtx.save();
+  skyCtx.fillStyle = mw;
+  skyCtx.beginPath();
+  skyCtx.ellipse(W*0.5, H*0.32, W*0.52, H*0.18, Math.PI/6, 0, Math.PI*2);
+  skyCtx.fill();
+  skyCtx.restore();
+
+  stars.forEach(s => {
+    s.phase += s.speed;
+    s.alpha = s.baseAlpha * (0.55 + 0.45 * Math.sin(s.phase));
+    skyCtx.save();
+    skyCtx.globalAlpha = s.alpha;
+    skyCtx.fillStyle = s.color;
+    skyCtx.shadowBlur = s.r * 3;
+    skyCtx.shadowColor = s.color;
+    skyCtx.beginPath();
+    skyCtx.arc(s.x * W, s.y * H, s.r, 0, Math.PI * 2);
+    skyCtx.fill();
+    skyCtx.restore();
+  });
+
+  brightStars.forEach(s => {
+    s.phase += s.speed;
+    const a = 0.6 + 0.4 * Math.sin(s.phase);
+    const sx = s.x * W, sy = s.y * H;
+    skyCtx.save();
+    skyCtx.globalAlpha = a;
+    const g = skyCtx.createRadialGradient(sx, sy, 0, sx, sy, s.r * 6);
+    g.addColorStop(0,   s.color);
+    g.addColorStop(0.3, s.color + '88');
+    g.addColorStop(1,   'transparent');
+    skyCtx.fillStyle = g;
+    skyCtx.beginPath();
+    skyCtx.arc(sx, sy, s.r * 6, 0, Math.PI * 2);
+    skyCtx.fill();
+    skyCtx.fillStyle = s.color;
+    skyCtx.shadowBlur = s.r * 6;
+    skyCtx.shadowColor = s.color;
+    skyCtx.beginPath();
+    skyCtx.arc(sx, sy, s.r, 0, Math.PI * 2);
+    skyCtx.fill();
+    skyCtx.globalAlpha = a * 0.5;
+    [[sx - s.r*8, sy, sx + s.r*8, sy],
+     [sx, sy - s.r*8, sx, sy + s.r*8]].forEach(([x1,y1,x2,y2]) => {
+      const lg = skyCtx.createLinearGradient(x1, y1, x2, y2);
+      lg.addColorStop(0,   'transparent');
+      lg.addColorStop(0.5, s.color);
+      lg.addColorStop(1,   'transparent');
+      skyCtx.strokeStyle = lg;
+      skyCtx.lineWidth = 0.8;
+      skyCtx.beginPath();
+      skyCtx.moveTo(x1, y1); skyCtx.lineTo(x2, y2);
+      skyCtx.stroke();
+    });
+    skyCtx.restore();
+  });
+
+  for (let i = shooters.length - 1; i >= 0; i--) {
+    const s = shooters[i];
+    s.progress += s.speed;
+    if (s.progress >= 1) { shooters.splice(i, 1); continue; }
+    const sx = s.x * W + Math.cos(s.angle) * s.progress * s.len * W;
+    const sy = s.y * H + Math.sin(s.angle) * s.progress * s.len * H;
+    const ex = sx - Math.cos(s.angle) * s.len * W * 0.38;
+    const ey = sy - Math.sin(s.angle) * s.len * H * 0.38;
+    const fade = 1 - s.progress;
+    const trail = skyCtx.createLinearGradient(ex, ey, sx, sy);
+    trail.addColorStop(0,   'rgba(255,255,255,0)');
+    trail.addColorStop(0.6, `rgba(220,235,255,${0.55 * fade})`);
+    trail.addColorStop(1,   `rgba(255,255,255,${0.9 * fade})`);
+    skyCtx.save();
+    skyCtx.strokeStyle = trail;
+    skyCtx.lineWidth = 1.4;
+    skyCtx.shadowBlur = 6;
+    skyCtx.shadowColor = '#aaccff';
+    skyCtx.beginPath();
+    skyCtx.moveTo(ex, ey); skyCtx.lineTo(sx, sy);
+    skyCtx.stroke();
+    skyCtx.restore();
+  }
+
+  requestAnimationFrame(drawSky);
+}
+drawSky();
+
+// ── SVG BOUQUET ──
+const svg = document.getElementById('bouquet-svg');
+const defs = el('defs');
+
+function radGrad(id, cx, cy, r, stops) {
+  const g = el('radialGradient', { id, cx, cy, r, fx: cx, fy: cy, gradientUnits:'objectBoundingBox' });
+  stops.forEach(([off, col]) => {
+    const s = el('stop'); s.setAttribute('offset', off); s.setAttribute('stop-color', col); g.appendChild(s);
+  });
+  return g;
+}
+function linGrad(id, x1, y1, x2, y2, stops) {
+  const g = el('linearGradient', { id, x1, y1, x2, y2, gradientUnits:'objectBoundingBox' });
+  stops.forEach(([off, col]) => {
+    const s = el('stop'); s.setAttribute('offset', off); s.setAttribute('stop-color', col); g.appendChild(s);
+  });
+  return g;
+}
+
+// ── LILY PETAL GRADIENTS ──
+// Outer layer petals (slightly more cream/warm)
+defs.appendChild(radGrad('gPetalOuter', '0.5','0.9','0.65', [
+  ['0%',   '#ffffff'],
+  ['35%',  '#90c8f8'],
+  ['100%', '#2e7dd4'],
+]));
+// Inner layer petals (brighter white, slightly cooler)
+defs.appendChild(radGrad('gPetalInner', '0.5','0.9','0.65', [
+  ['0%',   '#ffffff'],
+  ['40%',  '#bddcfc'],
+  ['100%', '#5aa0e8'],
+]));
+
+defs.appendChild(linGrad('gStem', '0','0','1','0', [
+  ['0%',   '#2d5228'],
+  ['45%',  '#4a8038'],
+  ['100%', '#243d20'],
+]));
+
+defs.appendChild(radGrad('gLeaf', '0.28','0.32','0.72', [
+  ['0%',   '#7ac860'],
+  ['55%',  '#4a8038'],
+  ['100%', '#2a4820'],
+]));
+
+// Pistil center
+defs.appendChild(radGrad('gDisk', '0.38','0.32','0.55', [
+  ['0%',   '#f5f0c0'],
+  ['45%',  '#c8b84a'],
+  ['100%', '#8a7a20'],
+]));
+
+// Anther
+defs.appendChild(radGrad('gAnther', '0.4','0.3','0.55', [
+  ['0%',   '#f5c842'],
+  ['60%',  '#d4880a'],
+  ['100%', '#8a5200'],
+]));
+
+const fGlow = el('filter', { id:'fBouquetGlow', x:'-15%', y:'-15%', width:'130%', height:'130%' });
+const feBlur = el('feGaussianBlur', { in:'SourceGraphic', stdDeviation:'7', result:'blur' });
+const feMerge = el('feMerge');
+feMerge.appendChild(el('feMergeNode', { in:'blur' }));
+feMerge.appendChild(el('feMergeNode', { in:'SourceGraphic' }));
+fGlow.appendChild(feBlur);
+fGlow.appendChild(feMerge);
+defs.appendChild(fGlow);
+
+svg.appendChild(defs);
+
+// ── LILY FLOWER FUNCTION ──
+// 3 outer tepals + 3 inner tepals, each wide enough to overlap neighbours
+function lily(parent, cx, cy, R, rotOff) {
+  const g = el('g', { transform:`translate(${cx},${cy})` });
+
+  // Helper: draw one tepal
+  function drawTepal(angDeg, pw, ph, gradId, opacity) {
+    const pg = el('g', { transform:`rotate(${angDeg}) translate(0,${-R * 0.18})` });
+    pg.appendChild(el('path', {
+      d:`M 0 0
+         C ${-pw * 1.2} ${-ph * 0.15}, ${-pw * 1.2} ${-ph * 0.55}, ${-pw * 0.60} ${-ph * 0.72}
+         C ${-pw * 0.30} ${-ph * 0.92}, 0 ${-ph}, 0 ${-ph}
+         C 0 ${-ph}, ${pw * 0.30} ${-ph * 0.92}, ${pw * 0.60} ${-ph * 0.80}
+         C ${pw * 1.2} ${-ph * 0.55}, ${pw * 1.2} ${-ph * 0.15}, 0 0 Z`,
+      fill: gradId,
+      stroke: 'rgba(195,188,178,0.5)',
+      'stroke-width': '0.6',
+      opacity: String(opacity),
+    }));
+    // Center vein
+    pg.appendChild(el('line', {
+      x1: 0, y1: `${-ph * 0.06}`, x2: 0, y2: `${-ph * 0.88}`,
+      stroke: 'rgba(170,158,138,0.32)', 'stroke-width': '0.7',
+    }));
+    // Side veins
+    [-1, 1].forEach(side => {
+      pg.appendChild(el('path', {
+        d:`M 0 ${-ph*0.28} Q ${side*pw*0.65} ${-ph*0.52}, ${side*pw*0.70} ${-ph*0.66}`,
+        stroke: 'rgba(170,158,138,0.18)', 'stroke-width': '0.4', fill: 'none',
+      }));
+    });
+    g.appendChild(pg);
+  }
+
+  // ── LAYER 1: 3 outer tepals ──
+  // Wide (pw = R*0.38) and long (ph = R*1.05)
+  // Spaced 120deg apart, starting at rotOff
+  for (let i = 0; i < 3; i++) {
+    const ang = rotOff + i * 120;
+    drawTepal(ang, R * 0.50, R * 1.75, 'url(#gPetalOuter)', 1.0);
+  }
+
+  // ── LAYER 2: 3 inner tepals ──
+  // Slightly narrower (pw = R*0.34) and slightly shorter (ph = R*0.95)
+  // Offset +60deg from outer layer so they sit in the gaps
+  for (let i = 0; i < 3; i++) {
+    const ang = rotOff + 60 + i * 120;
+    drawTepal(ang, R * 0.45, R * 1.60, 'url(#gPetalInner)', 0.97);
+  }
+
+  // ── STAMENS: 6 filaments ──
+  for (let i = 0; i < 6; i++) {
+    const ang = rotOff + i * 60;
+    const sLen = R * 0.52;
+    const rad = ang * Math.PI / 180;
+    const fx = Math.sin(rad) * R * 0.10;
+    const fy = -Math.cos(rad) * R * 0.10;
+    const tx = Math.sin(rad) * sLen;
+    const ty = -Math.cos(rad) * sLen;
+    g.appendChild(el('line', {
+      x1: fx, y1: fy, x2: tx, y2: ty,
+      stroke: 'rgba(210,195,155,0.92)', 'stroke-width': '0.85', 'stroke-linecap': 'round',
+    }));
+    const anthG = el('g', { transform:`translate(${tx},${ty}) rotate(${ang})` });
+    anthG.appendChild(el('ellipse', {
+      cx: 0, cy: 0, rx: 2.4, ry: 1.3,
+      fill: 'url(#gAnther)',
+    }));
+    g.appendChild(anthG);
+  }
+
+  // ── PISTIL ──
+  g.appendChild(el('circle', { cx: 0, cy: 0, r: R * 0.09, fill: 'url(#gDisk)' }));
+
+  parent.appendChild(g);
+  return g;
+}
+
+function stem(parent, x1, y1, x2, y2, w) {
+  const c1x = lerp(x1, x2, 0.25) + rand(-12, 12);
+  const c2x = lerp(x1, x2, 0.72) + rand(-8, 8);
+  parent.appendChild(el('path', {
+    d:`M ${x1} ${y1} C ${c1x} ${lerp(y1,y2,.32)}, ${c2x} ${lerp(y1,y2,.70)}, ${x2} ${y2}`,
+    stroke:'url(#gStem)', 'stroke-width':w, 'stroke-linecap':'round', fill:'none',
+  }));
+}
+
+function leaf(parent, x, y, ang, sc) {
+  const g = el('g', { transform:`translate(${x},${y}) rotate(${ang}) scale(${sc})` });
+  g.appendChild(el('path', {
+    d:`M 0 0
+       C -5 -10, -10 -22, -9 -38
+       C -8 -52, -5 -62, 0 -70
+       C 5 -62, 8 -52, 9 -38
+       C 10 -22, 5 -10, 0 0 Z`,
+    fill:'url(#gLeaf)', opacity:'0.95',
+  }));
+  g.appendChild(el('path', {
+    d:`M 0 0 C 0 -24, 0 -46, 0 -68`,
+    stroke:'rgba(20,60,15,0.38)', 'stroke-width':'0.8', fill:'none',
+  }));
+  [[-25,-18],[-28,-30],[-26,-44],[-18,-56]].forEach(([lx,ly]) => {
+    g.appendChild(el('path', {
+      d:`M 0 ${ly*0.55} Q ${lx*0.7} ${ly*0.82}, ${lx*0.88} ${ly}`,
+      stroke:'rgba(20,60,15,0.18)', 'stroke-width':'0.45', fill:'none',
+    }));
+    g.appendChild(el('path', {
+      d:`M 0 ${ly*0.55} Q ${-lx*0.7} ${ly*0.82}, ${-lx*0.88} ${ly}`,
+      stroke:'rgba(20,60,15,0.18)', 'stroke-width':'0.45', fill:'none',
+    }));
+  });
+  parent.appendChild(g);
+}
+
+const bouquet = el('g', { filter:'url(#fBouquetGlow)' });
+
+const BASE_X = 200, BASE_Y = 428;
+const stemDefs = [
+  [200, 110, 5.5],
+  [155, 130, 4.5],
+  [245, 132, 4.5],
+  [122, 158, 4.0],
+  [278, 160, 4.0],
+  [170, 148, 3.8],
+  [230, 150, 3.8],
+];
+
+const stemG = el('g');
+stemDefs.forEach(([hx, hy, w]) => stem(stemG, hx, hy, BASE_X, BASE_Y, w));
+bouquet.appendChild(stemG);
+
+const leafG = el('g');
+leaf(leafG, 172, 320, -52, 1.1);
+leaf(leafG, 228, 325,  50, 1.0);
+leaf(leafG, 155, 295, -38, 0.88);
+leaf(leafG, 248, 300,  40, 0.85);
+leaf(leafG, 185, 345, -28, 0.75);
+leaf(leafG, 218, 348,  30, 0.72);
+bouquet.appendChild(leafG);
+
+const flowerDefs = [
+  [122, 158, 36, 18],
+  [278, 160, 35, -5],
+  [155, 130, 42, 10],
+  [245, 132, 40,  4],
+  [170, 148, 34, 25],
+  [230, 150, 33, -12],
+  [200, 110, 52,  0],
+];
+
+const flowerG = el('g');
+flowerDefs.forEach(([cx, cy, R, rot]) => lily(flowerG, cx, cy, R, rot));
+bouquet.appendChild(flowerG);
+
+svg.appendChild(bouquet);
+
+// ── BOUQUET SWAY ──
+let swayT = 0;
+const flowerNodes = flowerG.children;
+const origTransforms = [];
+for (let i = 0; i < flowerNodes.length; i++) {
+  origTransforms.push(flowerNodes[i].getAttribute('transform'));
+}
+
+function swayLoop() {
+  swayT += 0.009;
+  for (let i = 0; i < flowerNodes.length; i++) {
+    const m  = parseFloat(origTransforms[i].match(/translate\(([^,]+)/)?.[1] || 0);
+    const my = parseFloat(origTransforms[i].match(/,([^)]+)/)?.[1] || 0);
+    const dx = 1.4 * Math.sin(swayT + i * 0.7);
+    const dy = 0.6 * Math.sin(swayT * 1.1 + i * 0.5);
+    flowerNodes[i].setAttribute('transform', `translate(${m + dx},${my + dy})`);
+  }
+  requestAnimationFrame(swayLoop);
+}
+swayLoop();
+
+// ── ENTRY ANIMATION ──
+bouquet.style.opacity = '0';
+bouquet.style.transition = 'opacity 1.2s ease';
+setTimeout(() => { bouquet.style.opacity = '1'; }, 120);
+
+document.querySelector('.text-block').style.cssText = 'opacity:0; transform:translateY(18px); transition: opacity 1s ease 0.9s, transform 1s ease 0.9s';
+setTimeout(() => {
+  document.querySelector('.text-block').style.opacity = '1';
+  document.querySelector('.text-block').style.transform = 'translateY(0)';
+}, 200);
+
+// ── FALLING PETALS ──
+const fc   = document.getElementById('falling-canvas');
+const fctx = fc.getContext('2d');
+
+function resizeFC() { fc.width = window.innerWidth; fc.height = window.innerHeight; }
+resizeFC();
+window.addEventListener('resize', resizeFC);
+
+class Petal {
+  constructor(initial) { this.reset(initial); }
+  reset(initial = false) {
+    this.x    = rand(0, fc.width);
+    this.y    = initial ? rand(-fc.height, 0) : rand(-50, -8);
+    this.w    = rand(6, 13);
+    this.h    = this.w * rand(0.5, 0.75);
+    this.vx   = rand(-0.4, 0.4);
+    this.vy   = rand(0.7, 1.9);
+    this.rot  = rand(0, Math.PI * 2);
+    this.vr   = rand(-0.022, 0.022);
+    this.sx   = 1;
+    this.sd   = rand(-0.007, 0.007);
+    this.fill = `hsla(${rand(205,225)},${rand(75,90)}%,${rand(65,80)}%,${rand(0.45,0.75)})`;
+  }
+  update() {
+    this.x  += this.vx + Math.sin(this.y * 0.013) * 0.35;
+    this.y  += this.vy;
+    this.rot += this.vr;
+    this.sx  += this.sd;
+    if (Math.abs(this.sx) > 1) this.sd *= -1;
+    if (this.y > fc.height + 40) this.reset();
+  }
+  draw() {
+    fctx.save();
+    fctx.translate(this.x, this.y);
+    fctx.rotate(this.rot);
+    fctx.scale(this.sx, 1);
+    fctx.beginPath();
+    fctx.moveTo(0, -this.h/2);
+    fctx.bezierCurveTo(
+      this.w * 0.5, -this.h * 0.2,
+      this.w * 0.5,  this.h * 0.2,
+      0,             this.h / 2
+    );
+    fctx.fillStyle = this.fill;
+    fctx.fill();
+    fctx.restore();
+  }
+}
+
+const petals = Array.from({ length: 32 }, () => new Petal(true));
+
+function petalLoop() {
+  fctx.clearRect(0, 0, fc.width, fc.height);
+  petals.forEach(p => { p.update(); p.draw(); });
+  requestAnimationFrame(petalLoop);
+}
+petalLoop();
+</script>
+</body>
+</html>
